@@ -271,9 +271,16 @@ export default function App() {
 
               <div className="p-4 rounded-2xl bg-slate-800/50 border border-slate-700/60 col-span-2 sm:col-span-1">
                 <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
-                  <Package className="w-3.5 h-3.5 text-emerald-400" /> Total Pos / Baris
+                  <Package className="w-3.5 h-3.5 text-emerald-400" /> Total Pos Screening
                 </div>
-                <div className="text-base font-bold text-white">{data.totalRecords} Pos</div>
+                <div className="text-base font-bold text-white flex items-baseline gap-2">
+                  <span>{data.totalRecords} Pos</span>
+                  {data.transshipmentCount > 0 && (
+                    <span className="text-xs font-normal text-amber-400">
+                      ({data.transshipmentCount} transshipment dilewati)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

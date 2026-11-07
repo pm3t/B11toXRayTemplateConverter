@@ -36,6 +36,7 @@ export interface ConversionResult {
   header: HeaderData;
   rows: DetilRow[];
   totalRecords: number;
+  transshipmentCount: number;
   fileName: string;
 }
 
@@ -185,7 +186,31 @@ export async function parseManifestFile(file: File): Promise<ConversionResult> {
     ? XLSX.utils.sheet_to_json<any>(workbook.Sheets[barangSheetName])
     : [];
 
-  const rows: DetilRow[] = detilRaw.map((det, index) => {
+  // Filter kargo transshipment (KD KELOMPOK POS == '02' atau PELABUHAN BONGKAR bukan tujuan di Header)
+  const headerBongkar = String(headerData.destination || headerData['PELABUHAN BONGKAR'] || '').trim().toUpperCase();
+
+  const validDetil: any[] = [];
+  let transshipmentCount = 0;
+
+  detilRaw.forEach((det) => {
+    let kdPos = String(det['KD KELOMPOK POS'] || '').trim();
+    if (kdPos.endsWith('.0')) kdPos = kdPos.slice(0, -2);
+    if (kdPos.length === 1) kdPos = '0' + kdPos;
+
+    const detBongkar = String(det['PELABUHAN BONGKAR'] || '').trim().toUpperCase();
+
+    const isTransshipment =
+      kdPos === '02' ||
+      (headerBongkar && detBongkar && detBongkar !== headerBongkar);
+
+    if (isTransshipment) {
+      transshipmentCount++;
+    } else {
+      validDetil.push(det);
+    }
+  });
+
+  const rows: DetilRow[] = validDetil.map((det, index) => {
     const idx = index + 1;
 
     // Act Pcs dari JUMLAH KEMASAN
@@ -244,6 +269,7 @@ export async function parseManifestFile(file: File): Promise<ConversionResult> {
     header: headerData,
     rows,
     totalRecords: rows.length,
+    transshipmentCount,
     fileName: file.name,
   };
 }

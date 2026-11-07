@@ -34,6 +34,16 @@ Program untuk mengonversi data manifes BC 1.1 dari file Excel berformat modern (
 
 ---
 
+## 🚫 Filter Kargo Transshipment
+
+Kargo transshipment (hanya transit / lanjutan ke luar negeri dan **tidak di-screening**) secara otomatis **dilewati (exclude)** dan tidak masuk ke file `OUT.xlsx`.
+
+Kriteria deteksi transshipment:
+1. Kolom `KD KELOMPOK POS` bernilai `'02'` (kargo pos lanjutan/transshipment).
+2. Nilai `PELABUHAN BONGKAR` atau `PELABUHAN AKHIR` berbeda dengan pelabuhan kedatangan impor pada Header (misalnya tujuan ke bandara luar negeri seperti `USJFK`, `AEDXB`, `ITMXP`).
+
+---
+
 ## 🌐 Cara Menjalankan Versi Web (Siap Deploy Vercel)
 
 Aplikasi ini kini dilengkapi versi **Web UI modern** yang berjalan langsung di browser (client-side) tanpa memerlukan server backend.

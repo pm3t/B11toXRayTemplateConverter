@@ -311,6 +311,38 @@ def create_or_load_template(template_path='template.xlsx'):
     return wb, ws
 
 
+def is_transshipment(det_row, header_data=None):
+    """
+    Mendeteksi apakah baris detil merupakan kargo transshipment (hanya transit / lanjut ke luar negeri).
+    Kriteria transshipment:
+    1. KD KELOMPOK POS bernilai '02' (kargo transshipment / pos lanjutan)
+    2. ATAU PELABUHAN BONGKAR / PELABUHAN AKHIR bukan pelabuhan kedatangan / tujuan impor di Header
+    """
+    # 1. Cek kode kelompok pos (Pos 01 = Impor lokal, Pos 02 = Transshipment / Transit)
+    kd_pos = str(det_row.get('KD KELOMPOK POS') or '').strip()
+    if kd_pos.endswith('.0'):
+        kd_pos = kd_pos[:-2]
+    # Format dua digit: '1' -> '01', '2' -> '02'
+    if len(kd_pos) == 1:
+        kd_pos = '0' + kd_pos
+        
+    if kd_pos == '02':
+        return True
+
+    # 2. Cek pelabuhan bongkar / pelabuhan akhir jika pelabuhan bongkar di header diketahui
+    header_bongkar = ''
+    if header_data:
+        header_bongkar = str(header_data.get('PELABUHAN BONGKAR') or '').strip().upper()
+
+    det_bongkar = str(det_row.get('PELABUHAN BONGKAR') or '').strip().upper()
+    det_akhir = str(det_row.get('PELABUHAN AKHIR') or '').strip().upper()
+
+    if header_bongkar and det_bongkar and det_bongkar != header_bongkar:
+        return True
+
+    return False
+
+
 def convert_manifest_to_breakdown(input_path, output_path, template_path='template.xlsx'):
     """
     Fungsi utama untuk membaca input manifes dan menulis output template breakdown report.
@@ -324,6 +356,23 @@ def convert_manifest_to_breakdown(input_path, output_path, template_path='templa
     header_data, detil_rows, barang_rows = read_input_excel(input_path)
     print(f"    - Ditemukan {len(detil_rows)} baris data pada Detil.")
     print(f"    - Ditemukan {len(barang_rows)} entri barang pada Barang.")
+
+    # Filter kargo transshipment (hanya ambil kargo impor lokal / screening)
+    filtered_detil_rows = []
+    skipped_count = 0
+    for det in detil_rows:
+        if is_transshipment(det, header_data):
+            skipped_count += 1
+            mawb = det.get('NO MASTER BLAWB')
+            bongkar = det.get('PELABUHAN BONGKAR') or det.get('PELABUHAN AKHIR')
+            print(f"    [i] Melewati kargo transshipment: MAWB {mawb} (Tujuan: {bongkar})")
+        else:
+            filtered_detil_rows.append(det)
+
+    if skipped_count > 0:
+        print(f"    - {skipped_count} kargo transshipment dilewati. {len(filtered_detil_rows)} kargo akan digenerate.")
+    
+    detil_rows = filtered_detil_rows
     
     # Header umum
     bc11_no = header_data.get('NO BC 11')
