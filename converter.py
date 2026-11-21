@@ -141,17 +141,240 @@ def get_nature_of_goods(id_detil, barang_list, max_length=50):
     return res
 
 
+def find_sheet_name(sheet_names, candidate_names):
+    """Mencari nama sheet dengan pencocokan case-insensitive."""
+    lower_map = {s.strip().lower(): s for s in sheet_names}
+    for c in candidate_names:
+        if c.lower() in lower_map:
+            return lower_map[c.lower()]
+    return None
+
+
+def detect_manifest_format(sheet_names):
+    """
+    Mendeteksi jenis format manifes:
+    - 'NVOCC': Format baru dengan sheet BL, BL HS, dan nvocc
+    - 'BC11': Format standar dengan sheet Header, Detil/Detail, dan Barang
+    """
+    bl_sheet = find_sheet_name(sheet_names, ['bl', 'b/l', 'sheet bl', 'sheet_bl'])
+    if bl_sheet:
+        return 'NVOCC'
+    return 'BC11'
+
+
+def _read_nvocc_xlsx(wb):
+    """Membaca file format NVOCC (XLSX)."""
+    bl_name = find_sheet_name(wb.sheetnames, ['bl', 'b/l'])
+    hs_name = find_sheet_name(wb.sheetnames, ['bl hs', 'bl_hs', 'hs', 'blhs'])
+    nvocc_name = find_sheet_name(wb.sheetnames, ['nvocc', 'nvocc header', 'header nvocc', 'header_nvocc'])
+
+    header_data = {
+        'FORMAT_TYPE': 'NVOCC',
+        'NO BC 11': None,
+        'TGL BC 11': None,
+        'NO VOYAGE / ARRIVAL': None,
+        'TGL TIBA': None,
+        'PELABUHAN ASAL': None,
+        'PELABUHAN BONGKAR': None
+    }
+
+    if nvocc_name:
+        ws_nv = wb[nvocc_name]
+        if ws_nv.max_row >= 2:
+            nv_keys = [str(ws_nv.cell(1, c).value or '').strip() for c in range(1, ws_nv.max_column + 1)]
+            nv_vals = [ws_nv.cell(2, c).value for c in range(1, ws_nv.max_column + 1)]
+            nv_dict = dict(zip(nv_keys, nv_vals))
+
+            # FlightNo: sheet nvocc kolom I (index 9) atau key 'Nomor Voyage'
+            flight_no = ws_nv.cell(2, 9).value if ws_nv.max_column >= 9 else None
+            if not flight_no:
+                flight_no = nv_dict.get('Nomor Voyage') or nv_dict.get('Imo Number') or nv_dict.get('Nama Sarana Pengangkut')
+
+            # FlightDate: sheet nvocc kolom tanggal tiba K (index 11) atau key 'Tanggal Tiba'
+            flight_date = ws_nv.cell(2, 11).value if ws_nv.max_column >= 11 else None
+            if not flight_date:
+                flight_date = nv_dict.get('Tanggal Tiba') or nv_dict.get('Tanggal Daftar')
+
+            header_data['NO VOYAGE / ARRIVAL'] = str(flight_no).strip() if flight_no else None
+            header_data['TGL TIBA'] = flight_date
+
+    # 1. Baca Sheet BL HS
+    barang_rows = []
+    if hs_name:
+        ws_hs = wb[hs_name]
+        for r in range(2, ws_hs.max_row + 1):
+            id_bl = ws_hs.cell(r, 2).value    # Kolom B: Id Bl
+            uraian = ws_hs.cell(r, 4).value   # Kolom D: Uraian Barang
+            kode_hs = ws_hs.cell(r, 3).value  # Kolom C: Kode Hs
+            seri = ws_hs.cell(r, 5).value     # Kolom E: Seri Hs
+            if id_bl or uraian:
+                barang_rows.append({
+                    'ID DETIL': id_bl,
+                    'URAIAN BARANG': uraian,
+                    'HS CODE': kode_hs,
+                    'SERI BARANG': seri
+                })
+
+    # 2. Baca Sheet BL
+    detil_rows = []
+    if bl_name:
+        ws_bl = wb[bl_name]
+        for r in range(2, ws_bl.max_row + 1):
+            row_vals = [ws_bl.cell(r, c).value for c in range(1, ws_bl.max_column + 1)]
+            if not any(v is not None and str(v).strip() != '' for v in row_vals):
+                continue
+
+            id_bl = ws_bl.cell(r, 1).value               # Kolom A: Id Bl
+            mawb = ws_bl.cell(r, 6).value                # Kolom F: Nomor Bl
+            hawb = ws_bl.cell(r, 8).value                # Kolom H: Nomor Host Bl
+            jumlah_kemasan = ws_bl.cell(r, 21).value     # Kolom U: Jumlah Kemasan
+            berat = ws_bl.cell(r, 17).value              # Kolom Q: Berat
+            origin = ws_bl.cell(r, 25).value or ws_bl.cell(r, 23).value   # Kolom Y: Transit, fallback W: Asal
+            dest = ws_bl.cell(r, 26).value or ws_bl.cell(r, 24).value     # Kolom Z: Akhir, fallback X: Bongkar
+            shipper = ws_bl.cell(r, 11).value            # Kolom K: Nama Pengirim
+            alamat_shipper = ws_bl.cell(r, 12).value     # Kolom L: Alamat Pengirim
+            consignee = ws_bl.cell(r, 13).value          # Kolom M: Nama Penerima
+            alamat_consignee = ws_bl.cell(r, 14).value   # Kolom N: Alamat Penerima
+            kd_pos = ws_bl.cell(r, 4).value              # Kolom D: Kode Kelompok Pos
+
+            detil_rows.append({
+                'ID DETIL': id_bl,
+                'NO MASTER BLAWB': mawb,
+                'NO HOST BLAWB': hawb,
+                'JUMLAH KEMASAN': jumlah_kemasan,
+                'TOTAL KEMASAN': jumlah_kemasan,
+                'ACT WEIGHT': berat,
+                'BRUTO': berat,
+                'PELABUHAN ASAL': origin,
+                'PELABUHAN BONGKAR': dest,
+                'PELABUHAN AKHIR': dest,
+                'NAMA SHIPPER': shipper,
+                'ALMT SHIPPER': alamat_shipper,
+                'NAMA CONSIGNEE': consignee,
+                'ALMT CONSIGNEE': alamat_consignee,
+                'KD KELOMPOK POS': kd_pos
+            })
+
+            if not header_data.get('PELABUHAN ASAL') and origin:
+                header_data['PELABUHAN ASAL'] = origin
+            if not header_data.get('PELABUHAN BONGKAR') and dest:
+                header_data['PELABUHAN BONGKAR'] = dest
+
+    wb.close()
+    return header_data, detil_rows, barang_rows
+
+
+def _read_nvocc_xls(wb):
+    """Membaca file format NVOCC (XLS)."""
+    bl_name = find_sheet_name(wb.sheet_names(), ['bl', 'b/l'])
+    hs_name = find_sheet_name(wb.sheet_names(), ['bl hs', 'bl_hs', 'hs', 'blhs'])
+    nvocc_name = find_sheet_name(wb.sheet_names(), ['nvocc', 'nvocc header', 'header nvocc', 'header_nvocc'])
+
+    header_data = {
+        'FORMAT_TYPE': 'NVOCC',
+        'NO BC 11': None,
+        'TGL BC 11': None,
+        'NO VOYAGE / ARRIVAL': None,
+        'TGL TIBA': None,
+        'PELABUHAN ASAL': None,
+        'PELABUHAN BONGKAR': None
+    }
+
+    if nvocc_name:
+        ws_nv = wb.sheet_by_name(nvocc_name)
+        if ws_nv.nrows >= 2:
+            flight_no = ws_nv.cell_value(1, 8) if ws_nv.ncols >= 9 else None
+            flight_date = ws_nv.cell_value(1, 10) if ws_nv.ncols >= 11 else None
+            
+            # Konversi date jika tipe DATE di xlrd
+            if ws_nv.ncols >= 11 and ws_nv.cell_type(1, 10) == xlrd.XL_CELL_DATE:
+                try:
+                    dt = xlrd.xldate_as_tuple(flight_date, wb.datemode)
+                    flight_date = datetime(*dt)
+                except Exception:
+                    pass
+
+            header_data['NO VOYAGE / ARRIVAL'] = str(flight_no).strip() if flight_no else None
+            header_data['TGL TIBA'] = flight_date
+
+    barang_rows = []
+    if hs_name:
+        ws_hs = wb.sheet_by_name(hs_name)
+        for r in range(1, ws_hs.nrows):
+            id_bl = ws_hs.cell_value(r, 1) if ws_hs.ncols >= 2 else None
+            uraian = ws_hs.cell_value(r, 3) if ws_hs.ncols >= 4 else None
+            kode_hs = ws_hs.cell_value(r, 2) if ws_hs.ncols >= 3 else None
+            seri = ws_hs.cell_value(r, 4) if ws_hs.ncols >= 5 else None
+            if id_bl or uraian:
+                barang_rows.append({
+                    'ID DETIL': id_bl,
+                    'URAIAN BARANG': uraian,
+                    'HS CODE': kode_hs,
+                    'SERI BARANG': seri
+                })
+
+    detil_rows = []
+    if bl_name:
+        ws_bl = wb.sheet_by_name(bl_name)
+        for r in range(1, ws_bl.nrows):
+            row_vals = [ws_bl.cell_value(r, c) for c in range(ws_bl.ncols)]
+            if not any(v not in (None, '') for v in row_vals):
+                continue
+
+            id_bl = ws_bl.cell_value(r, 0) if ws_bl.ncols >= 1 else None
+            mawb = ws_bl.cell_value(r, 5) if ws_bl.ncols >= 6 else None
+            hawb = ws_bl.cell_value(r, 7) if ws_bl.ncols >= 8 else None
+            jumlah_kemasan = ws_bl.cell_value(r, 20) if ws_bl.ncols >= 21 else None
+            berat = ws_bl.cell_value(r, 16) if ws_bl.ncols >= 17 else None
+            origin = (ws_bl.cell_value(r, 24) if ws_bl.ncols >= 25 else None) or (ws_bl.cell_value(r, 22) if ws_bl.ncols >= 23 else None)
+            dest = (ws_bl.cell_value(r, 25) if ws_bl.ncols >= 26 else None) or (ws_bl.cell_value(r, 23) if ws_bl.ncols >= 24 else None)
+            shipper = ws_bl.cell_value(r, 10) if ws_bl.ncols >= 11 else None
+            alamat_shipper = ws_bl.cell_value(r, 11) if ws_bl.ncols >= 12 else None
+            consignee = ws_bl.cell_value(r, 12) if ws_bl.ncols >= 13 else None
+            alamat_consignee = ws_bl.cell_value(r, 13) if ws_bl.ncols >= 14 else None
+            kd_pos = ws_bl.cell_value(r, 3) if ws_bl.ncols >= 4 else None
+
+            detil_rows.append({
+                'ID DETIL': id_bl,
+                'NO MASTER BLAWB': mawb,
+                'NO HOST BLAWB': hawb,
+                'JUMLAH KEMASAN': jumlah_kemasan,
+                'TOTAL KEMASAN': jumlah_kemasan,
+                'ACT WEIGHT': berat,
+                'BRUTO': berat,
+                'PELABUHAN ASAL': origin,
+                'PELABUHAN BONGKAR': dest,
+                'PELABUHAN AKHIR': dest,
+                'NAMA SHIPPER': shipper,
+                'ALMT SHIPPER': alamat_shipper,
+                'NAMA CONSIGNEE': consignee,
+                'ALMT CONSIGNEE': alamat_consignee,
+                'KD KELOMPOK POS': kd_pos
+            })
+
+            if not header_data.get('PELABUHAN ASAL') and origin:
+                header_data['PELABUHAN ASAL'] = origin
+            if not header_data.get('PELABUHAN BONGKAR') and dest:
+                header_data['PELABUHAN BONGKAR'] = dest
+
+    return header_data, detil_rows, barang_rows
+
+
 def _read_input_xlsx(input_path):
     """Membaca file format modern .xlsx menggunakan openpyxl."""
     wb = openpyxl.load_workbook(input_path, data_only=True)
     
+    fmt = detect_manifest_format(wb.sheetnames)
+    if fmt == 'NVOCC':
+        return _read_nvocc_xlsx(wb)
+
     # 1. Sheet Header
-    header_data = {}
+    header_data = {'FORMAT_TYPE': 'BC11'}
     if 'Header' in wb.sheetnames:
         ws_hdr = wb['Header']
         keys = [ws_hdr.cell(1, c).value for c in range(1, ws_hdr.max_column + 1)]
         values = [ws_hdr.cell(2, c).value for c in range(1, ws_hdr.max_column + 1)]
-        header_data = dict(zip(keys, values))
+        header_data.update(dict(zip(keys, values)))
     
     # 2. Sheet Detil / Detail
     detil_rows = []
@@ -188,6 +411,10 @@ def _read_input_xls(input_path):
     
     wb = xlrd.open_workbook(input_path)
 
+    fmt = detect_manifest_format(wb.sheet_names())
+    if fmt == 'NVOCC':
+        return _read_nvocc_xls(wb)
+
     def get_row(sheet, r):
         row_vals = []
         for c in range(sheet.ncols):
@@ -206,13 +433,13 @@ def _read_input_xls(input_path):
         return row_vals
 
     # 1. Sheet Header
-    header_data = {}
+    header_data = {'FORMAT_TYPE': 'BC11'}
     if 'Header' in wb.sheet_names():
         ws_hdr = wb.sheet_by_name('Header')
         if ws_hdr.nrows >= 1:
             keys = [str(ws_hdr.cell_value(0, c)).strip() for c in range(ws_hdr.ncols)]
             vals = get_row(ws_hdr, 1) if ws_hdr.nrows > 1 else []
-            header_data = dict(zip(keys, vals))
+            header_data.update(dict(zip(keys, vals)))
 
     # 2. Sheet Detil / Detail
     detil_rows = []
@@ -419,10 +646,20 @@ def convert_manifest_to_breakdown(input_path, output_path, template_path='templa
             except (ValueError, TypeError):
                 pass
         
-        # Tot Weight
+        # Tot Weight & Act Weight
+        act_weight = det.get('ACT WEIGHT')
+        if act_weight is not None and str(act_weight).strip() != '':
+            act_weight = str(act_weight).strip()
+        else:
+            act_weight = None
+
         tot_weight = det.get('BRUTO')
-        if tot_weight is not None:
+        if tot_weight is not None and str(tot_weight).strip() != '':
             tot_weight = str(tot_weight).strip()
+        elif act_weight is not None:
+            tot_weight = act_weight
+        else:
+            tot_weight = None
             
         nature_of_goods = get_nature_of_goods(det.get('ID DETIL'), barang_rows)
         origin = det.get('PELABUHAN ASAL') or default_origin
@@ -435,7 +672,7 @@ def convert_manifest_to_breakdown(input_path, output_path, template_path='templa
             act_pcs,                                    # 4: Act Pcs
             None,                                       # 5: of
             tot_pcs,                                    # 6: Tot Pcs
-            None,                                       # 7: Act Weight
+            act_weight,                                 # 7: Act Weight
             None,                                       # 8: of
             tot_weight,                                 # 9: Tot Weight
             nature_of_goods,                            # 10: Nature of Goods

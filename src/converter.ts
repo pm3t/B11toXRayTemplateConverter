@@ -17,6 +17,7 @@ export interface DetilRow {
   hawb: string;
   actPcs: number | null;
   totPcs: number | null;
+  actWeight?: string | null;
   totWeight: string;
   natureOfGoods: string;
   bc11: string;
@@ -37,6 +38,7 @@ export interface ConversionResult {
   rows: DetilRow[];
   totalRecords: number;
   transshipmentCount: number;
+  formatType?: 'BC11' | 'NVOCC';
   fileName: string;
 }
 
@@ -152,6 +154,173 @@ export async function parseManifestFile(file: File): Promise<ConversionResult> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
 
+  const blSheetName = workbook.SheetNames.find((s) => ['bl', 'b/l'].includes(s.toLowerCase().trim()));
+  const isNvocc = Boolean(blSheetName);
+
+  if (isNvocc) {
+    // ==========================================
+    // TIPE FORMAT 2: NVOCC (BL, BL HS, nvocc)
+    // ==========================================
+    let headerData: HeaderData = {
+      noBc11: '',
+      tglBc11: null,
+      flightNumber: '',
+      flightDate: null,
+      origin: '',
+      destination: '',
+    };
+
+    const nvoccSheetName = workbook.SheetNames.find((s) =>
+      ['nvocc', 'nvocc header', 'header nvocc', 'header'].includes(s.toLowerCase().trim())
+    );
+
+    if (nvoccSheetName) {
+      // Baca baris secara array of arrays untuk akses indeks kolom yang pasti
+      const rawAoa = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[nvoccSheetName], { header: 1 });
+      if (rawAoa.length > 1) {
+        const row1 = rawAoa[1];
+        // FlightNo: sheet nvocc kolom I (index 8)
+        const flightNo = row1[8] !== undefined ? String(row1[8]).trim() : '';
+        // FlightDate: sheet nvocc kolom tanggal tiba (K) (index 10)
+        const flightDate = parseDate(row1[10]);
+
+        headerData.flightNumber = flightNo;
+        headerData.flightDate = flightDate;
+      }
+    }
+
+    // Baca Sheet BL HS
+    const hsSheetName = workbook.SheetNames.find((s) =>
+      ['bl hs', 'bl_hs', 'hs', 'blhs'].includes(s.toLowerCase().trim())
+    );
+    const barangRaw: any[] = [];
+    if (hsSheetName) {
+      const hsAoa = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[hsSheetName], { header: 1 });
+      for (let r = 1; r < hsAoa.length; r++) {
+        const row = hsAoa[r];
+        if (!row || row.length === 0) continue;
+        const idBl = row[1] !== undefined ? String(row[1]).trim() : ''; // Kolom B: Id Bl
+        const uraian = row[3] !== undefined ? String(row[3]).trim() : ''; // Kolom D: Uraian Barang
+        const kodeHs = row[2] !== undefined ? String(row[2]).trim() : ''; // Kolom C: Kode Hs
+        const seri = row[4] !== undefined ? String(row[4]).trim() : ''; // Kolom E: Seri Hs
+        if (idBl || uraian) {
+          barangRaw.push({
+            'ID DETIL': idBl,
+            'URAIAN BARANG': uraian,
+            'HS CODE': kodeHs,
+            'SERI BARANG': seri,
+          });
+        }
+      }
+    }
+
+    // Baca Sheet BL
+    const blAoa = blSheetName
+      ? XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[blSheetName], { header: 1 })
+      : [];
+
+    const validDetil: any[] = [];
+    let transshipmentCount = 0;
+
+    for (let r = 1; r < blAoa.length; r++) {
+      const row = blAoa[r];
+      if (!row || row.length === 0 || !row.some((c) => c !== undefined && c !== null && String(c).trim() !== '')) {
+        continue;
+      }
+
+      let kdPos = row[3] !== undefined ? String(row[3]).trim() : ''; // Kolom D: Kode Kelompok Pos
+      if (kdPos.endsWith('.0')) kdPos = kdPos.slice(0, -2);
+      if (kdPos.length === 1) kdPos = '0' + kdPos;
+
+      const dest = row[25] !== undefined && String(row[25]).trim() !== ''
+        ? String(row[25]).trim()
+        : (row[23] !== undefined ? String(row[23]).trim() : ''); // Kolom Z (Akhir), fallback X (Bongkar)
+
+      const isTransshipment = kdPos === '02';
+      if (isTransshipment) {
+        transshipmentCount++;
+      } else {
+        validDetil.push(row);
+      }
+    }
+
+    const rows: DetilRow[] = validDetil.map((row, index) => {
+      const idx = index + 1;
+      const idBl = row[0] !== undefined ? String(row[0]).trim() : ''; // Kolom A: Id Bl
+      const mawb = row[5] !== undefined ? String(row[5]).trim() : ''; // Kolom F: Nomor Bl
+      const hawb = row[7] !== undefined ? String(row[7]).trim() : ''; // Kolom H: Nomor Host Bl
+
+      // Act PCs & Total PCs: sheet BL kolom U (index 20)
+      let pcs: number | null = null;
+      const rawPcs = row[20];
+      if (rawPcs !== undefined && rawPcs !== null && String(rawPcs).trim() !== '') {
+        const n = Number(rawPcs);
+        if (!isNaN(n)) pcs = Math.floor(n);
+      }
+
+      // Act weight: sheet BL kolom Q (index 16)
+      let actWeight: string | null = null;
+      if (row[16] !== undefined && row[16] !== null && String(row[16]).trim() !== '') {
+        actWeight = String(row[16]).trim();
+      }
+
+      const natureOfGoods = getNatureOfGoods(idBl, barangRaw, 50);
+
+      // Origin: sheet BL kolom Y (index 24), fallback W (index 22)
+      const origin = row[24] !== undefined && String(row[24]).trim() !== ''
+        ? String(row[24]).trim()
+        : (row[22] !== undefined ? String(row[22]).trim() : '');
+
+      // Destination: sheet BL kolom Z (index 25), fallback X (index 23)
+      const destination = row[25] !== undefined && String(row[25]).trim() !== ''
+        ? String(row[25]).trim()
+        : (row[23] !== undefined ? String(row[23]).trim() : '');
+
+      // Shipper: sheet BL kolom K (index 10)
+      const shipper = row[10] !== undefined ? String(row[10]).trim() : '';
+      // Alamat Shipper: sheet BL kolom L (index 11)
+      const alamatShipper = row[11] !== undefined ? String(row[11]).trim() : '';
+      // Consignee: sheet BL kolom M (index 12)
+      const consignee = row[12] !== undefined ? String(row[12]).trim() : '';
+      // Alamat Consignee: sheet BL kolom N (index 13)
+      const alamatConsignee = row[13] !== undefined ? String(row[13]).trim() : '';
+
+      return {
+        no: idx,
+        mawb,
+        hawb,
+        actPcs: pcs,
+        totPcs: pcs,
+        actWeight,
+        totWeight: actWeight || '',
+        natureOfGoods,
+        bc11: '',
+        tanggalBc11: null,
+        flightNumber: headerData.flightNumber || '',
+        flightDate: headerData.flightDate instanceof Date ? headerData.flightDate : null,
+        origin,
+        destination,
+        shipper,
+        alamatShipper,
+        consignee,
+        alamatConsignee,
+        idDetil: idBl,
+      };
+    });
+
+    return {
+      header: headerData,
+      rows,
+      totalRecords: rows.length,
+      transshipmentCount,
+      formatType: 'NVOCC',
+      fileName: file.name,
+    };
+  }
+
+  // ==========================================
+  // TIPE FORMAT 1: BC 1.1 (Header, Detil, Barang)
+  // ==========================================
   // 1. Header Sheet
   let headerData: HeaderData = {};
   const headerSheetName = workbook.SheetNames.find((s) => s.toLowerCase() === 'header');
@@ -270,6 +439,7 @@ export async function parseManifestFile(file: File): Promise<ConversionResult> {
     rows,
     totalRecords: rows.length,
     transshipmentCount,
+    formatType: 'BC11',
     fileName: file.name,
   };
 }
@@ -319,14 +489,14 @@ export async function generateExcelBlob(conversion: ConversionResult): Promise<B
       row.actPcs, // 4: Act Pcs
       null, // 5: of
       row.totPcs, // 6: Tot Pcs
-      null, // 7: Act Weight
+      row.actWeight || null, // 7: Act Weight
       null, // 8: of
       row.totWeight, // 9: Tot Weight
       row.natureOfGoods, // 10: Nature of Goods
       null, // 11: Actual Times
       null, // 12: Remarks
       null, // 13: Status
-      row.bc11, // 14: BC11
+      row.bc11 || null, // 14: BC11
       row.tanggalBc11, // 15: TanggalBC11
       row.flightNumber, // 16: FlightNumber
       row.flightDate, // 17: FlightDate

@@ -209,10 +209,19 @@ export default function App() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-800/70 p-4 rounded-2xl border border-slate-700/60">
               <div>
                 <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">File Sumber</span>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
-                  {data.fileName}
-                </h2>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4 text-indigo-400" />
+                    {data.fileName}
+                  </h2>
+                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${
+                    data.formatType === 'NVOCC' 
+                      ? 'bg-purple-500/10 text-purple-300 border-purple-500/20' 
+                      : 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                  }`}>
+                    {data.formatType === 'NVOCC' ? 'Format: NVOCC / BL' : 'Format: Manifes BC 1.1'}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -313,6 +322,7 @@ export default function App() {
                       <th className="py-3 px-3">HAWB</th>
                       <th className="py-3 px-3 text-center">Act Pcs</th>
                       <th className="py-3 px-3 text-center">Tot Pcs</th>
+                      <th className="py-3 px-3 text-right">Act Weight</th>
                       <th className="py-3 px-3 text-right">Tot Weight</th>
                       <th className="py-3 px-3">Nature of Goods (Max 50)</th>
                       <th className="py-3 px-3">Shipper</th>
@@ -330,6 +340,9 @@ export default function App() {
                         </td>
                         <td className="py-2.5 px-3 text-center font-bold text-emerald-400 bg-emerald-500/5">
                           {r.totPcs ?? '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-300">
+                          {r.actWeight || '-'}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-300">{r.totWeight}</td>
                         <td className="py-2.5 px-3 text-amber-200 max-w-xs truncate" title={r.natureOfGoods}>

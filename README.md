@@ -1,36 +1,40 @@
 # X-Ray Cargo Breakdown Report Template Generator
 
-Program untuk mengonversi data manifes BC 1.1 dari file Excel berformat modern (`.xlsx`) maupun file Excel lama (`.xls`) menjadi file Excel template laporan *Breakdown Report Cargo International* (`.xlsx`).
+Program untuk mengonversi data manifes dari file Excel berformat modern (`.xlsx`) maupun file Excel lama (`.xls`) menjadi file Excel template laporan *Breakdown Report Cargo International* (`.xlsx`).
+
+Mendukung **2 tipe format input**:
+1. **Format 1 (Manifes Maskapai / BC 1.1)**: Sheet `Header`, `Detil`/`Detail`, dan `Barang`.
+2. **Format 2 (Manifes NVOCC / BL)**: Sheet `BL`, `BL HS`, dan `nvocc`.
 
 ---
 
 ## 📋 Pemetaan Kolom (Mapping Rules)
 
-| No | Kolom di `OUT.xlsx` | Sumber di `IN.xlsx` / `*.xls` | Keterangan |
-|---|---|---|---|
-| 1 | **No** | Nomor Urut (1, 2, 3, ...) | Nomor urut integer |
-| 2 | **MAWB** | Sheet `Detil` -> `NO MASTER BLAWB` | Master Air Waybill |
-| 3 | **HAWB** | Sheet `Detil` -> `NO HOST BLAWB` | House Air Waybill |
-| 4 | **Act Pcs** | Sheet `Detil` / `Detail` -> `JUMLAH KEMASAN` | Jumlah kemasan aktual (integer) |
-| 5 | **of** | *(Kosong / None)* | Sesuai template |
-| 6 | **Tot Pcs** | Sheet `Detil` -> `TOTAL KEMASAN` | Total kemasan (fallback ke `JUMLAH KEMASAN` jika kosong) |
-| 7 | **Act Weight** | *(Kosong / None)* | Sesuai template |
-| 8 | **of** | *(Kosong / None)* | Sesuai template |
-| 9 | **Tot Weight** | Sheet `Detil` -> `BRUTO` | Total berat kotor |
-| 10 | **Nature of Goods** | Sheet `Barang` -> `URAIAN BARANG` | Dipilih berdasarkan kecocokan `ID DETIL`. Nilai `'CONSOL'` dan kode HS `'0000'` difilter secara cerdas. Dibatasi maksimal 50 karakter. |
-| 11 | **Actual Times** | *(Kosong / None)* | Sesuai template |
-| 12 | **Remarks** | *(Kosong / None)* | Sesuai template |
-| 13 | **Status** | *(Kosong / None)* | Sesuai template |
-| 14 | **BC11** | Sheet `Header` -> `NO BC 11` | Nomor pendaftaran BC 1.1 |
-| 15 | **TanggalBC11** | Sheet `Header` -> `TGL BC 11` | Tanggal BC 1.1 (format tanggal `mm-dd-yy`) |
-| 16 | **FlightNumber** | Sheet `Header` -> `NO VOYAGE / ARRIVAL` | Nomor penerbangan / flight (e.g. VJ0929) |
-| 17 | **FlightDate** | Sheet `Header` -> `TGL TIBA` | Tanggal penerbangan / tiba (format `mm-dd-yy`) |
-| 18 | **Origin** | Sheet `Detil` / `Header` -> `PELABUHAN ASAL` | Kode bandara / pelabuhan asal |
-| 19 | **Destination** | Sheet `Detil` / `Header` -> `PELABUHAN BONGKAR` | Kode bandara / pelabuhan tujuan/bongkar |
-| 20 | **Shipper ** | Sheet `Detil` -> `NAMA SHIPPER` | Nama pengirim barang |
-| 21 | **AlamatShipper ** | Sheet `Detil` -> `ALMT SHIPPER` | Alamat pengirim barang |
-| 22 | **Consignee** | Sheet `Detil` -> `NAMA CONSIGNEE` | Nama penerima barang |
-| 23 | **AlamatConsignee** | Sheet `Detil` -> `ALMT CONSIGNEE` | Alamat penerima barang |
+| No | Kolom di `OUT.xlsx` | Format 1 (Manifes BC 1.1) | Format 2 (NVOCC / BL) | Keterangan |
+|---|---|---|---|---|
+| 1 | **No** | Nomor Urut (1, 2, ...) | Nomor Urut (1, 2, ...) | Nomor urut integer |
+| 2 | **MAWB** | Sheet `Detil` -> `NO MASTER BLAWB` | Sheet `BL` Kolom F (`Nomor Bl`) | Master Air Waybill |
+| 3 | **HAWB** | Sheet `Detil` -> `NO HOST BLAWB` | Sheet `BL` Kolom H (`Nomor Host Bl`) | House Air Waybill |
+| 4 | **Act Pcs** | Sheet `Detil` -> `JUMLAH KEMASAN` | Sheet `BL` Kolom U (`Jumlah Kemasan`) | Jumlah kemasan aktual |
+| 5 | **of** | *(Kosong / None)* | *(Kosong / None)* | Sesuai template |
+| 6 | **Tot Pcs** | Sheet `Detil` -> `TOTAL KEMASAN` | Sheet `BL` Kolom U (`Jumlah Kemasan`) | Total kemasan |
+| 7 | **Act Weight** | *(Kosong / None)* | Sheet `BL` Kolom Q (`Berat`) | Berat aktual |
+| 8 | **of** | *(Kosong / None)* | *(Kosong / None)* | Sesuai template |
+| 9 | **Tot Weight** | Sheet `Detil` -> `BRUTO` | Sheet `BL` Kolom Q (`Berat`) | Total berat kotor |
+| 10 | **Nature of Goods** | Sheet `Barang` -> `URAIAN BARANG` | Sheet `BL HS` Kolom D (`Uraian Barang`) | Relasi `Id Bl`. Maksimal 50 karakter. |
+| 11 | **Actual Times** | *(Kosong / None)* | *(Kosong / None)* | Sesuai template |
+| 12 | **Remarks** | *(Kosong / None)* | *(Kosong / None)* | Sesuai template |
+| 13 | **Status** | *(Kosong / None)* | *(Kosong / None)* | Sesuai template |
+| 14 | **BC11** | Sheet `Header` -> `NO BC 11` | *(Kosongkan)* | Nomor pendaftaran BC 1.1 |
+| 15 | **TanggalBC11** | Sheet `Header` -> `TGL BC 11` | *(Kosongkan)* | Tanggal BC 1.1 (`mm-dd-yy`) |
+| 16 | **FlightNumber** | Sheet `Header` -> `NO VOYAGE / ARRIVAL` | Sheet `nvocc` Kolom I (`Nomor Voyage`) | Nomor penerbangan / flight |
+| 17 | **FlightDate** | Sheet `Header` -> `TGL TIBA` | Sheet `nvocc` Kolom K (`Tanggal Tiba`) | Tanggal penerbangan (`mm-dd-yy`) |
+| 18 | **Origin** | Sheet `Detil` / `Header` -> `PELABUHAN ASAL` | Sheet `BL` Kolom Y (`Kode Pelabuhan Transit` / Asal) | Kode bandara asal |
+| 19 | **Destination** | Sheet `Detil` / `Header` -> `PELABUHAN BONGKAR` | Sheet `BL` Kolom Z (`Kode Pelabuhan Akhir` / Bongkar) | Kode bandara tujuan |
+| 20 | **Shipper ** | Sheet `Detil` -> `NAMA SHIPPER` | Sheet `BL` Kolom K (`Nama Pengirim`) | Nama pengirim barang |
+| 21 | **AlamatShipper ** | Sheet `Detil` -> `ALMT SHIPPER` | Sheet `BL` Kolom L (`Alamat Pengirim`) | Alamat pengirim barang |
+| 22 | **Consignee** | Sheet `Detil` -> `NAMA CONSIGNEE` | Sheet `BL` Kolom M (`Nama Penerima`) | Nama penerima barang |
+| 23 | **AlamatConsignee** | Sheet `Detil` -> `ALMT CONSIGNEE` | Sheet `BL` Kolom N (`Alamat Penerima`) | Alamat penerima barang |
 
 ---
 
