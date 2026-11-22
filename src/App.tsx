@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   FileSpreadsheet,
   UploadCloud,
@@ -13,8 +13,15 @@ import {
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
+  Coins,
+  PlusCircle,
+  Sparkles,
 } from 'lucide-react';
 import { parseManifestFile, generateExcelBlob, ConversionResult } from './converter';
+import { getOrCreateWallet, consumeToken } from './services/tokenService';
+import { UserWallet } from './types/token';
+import TopUpModal from './components/TopUpModal';
+import AdminVoucherModal from './components/AdminVoucherModal';
 
 export default function App() {
   const [data, setData] = useState<ConversionResult | null>(null);
@@ -23,6 +30,25 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // State Monetisasi & Token
+  const [wallet, setWallet] = useState<UserWallet>(getOrCreateWallet());
+  const [isTopUpOpen, setIsTopUpOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [topUpNotice, setTopUpNotice] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleWalletUpdate = () => {
+      setWallet(getOrCreateWallet());
+    };
+    window.addEventListener('xray:wallet_updated', handleWalletUpdate);
+    window.addEventListener('storage', handleWalletUpdate);
+    return () => {
+      window.removeEventListener('xray:wallet_updated', handleWalletUpdate);
+      window.removeEventListener('storage', handleWalletUpdate);
+    };
+  }, []);
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -57,6 +83,27 @@ export default function App() {
 
   const handleDownload = async () => {
     if (!data) return;
+
+    // Cek saldo token sebelum download
+    if (wallet.balance < 1) {
+      setTopUpNotice('Token Anda telah habis (Sisa: 0 Token). Silakan top up untuk mendownload file.');
+      setIsTopUpOpen(true);
+      return;
+    }
+
+    const res = consumeToken();
+    if (!res.success) {
+      setTopUpNotice(res.error || 'Token tidak cukup untuk melakukan konversi.');
+      setIsTopUpOpen(true);
+      return;
+    }
+
+    // Refresh wallet
+    const updatedWallet = getOrCreateWallet();
+    setWallet(updatedWallet);
+    setToastMessage(`🎉 Berhasil! 1 Token digunakan untuk konversi. Sisa token Anda: ${updatedWallet.balance}`);
+    setTimeout(() => setToastMessage(null), 4500);
+
     try {
       const blob = await generateExcelBlob(data);
       const url = URL.createObjectURL(blob);
@@ -104,10 +151,29 @@ export default function App() {
               <p className="text-xs text-slate-400">Manifes BC 1.1 (.xlsx / .xls) &rarr; OUT.xlsx</p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3">
             <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <ShieldCheck className="w-3.5 h-3.5" /> Client-Side (100% Aman &amp; Privat)
             </span>
+
+            {/* Token Balance Badge */}
+            <div className="flex items-center bg-slate-800/90 border border-slate-700/80 rounded-full pl-3 pr-1 py-1 shadow-inner gap-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                <Coins className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span>{wallet.balance}</span>
+                <span className="text-[11px] font-normal text-slate-400">Token</span>
+              </div>
+              <button
+                onClick={() => {
+                  setTopUpNotice(null);
+                  setIsTopUpOpen(true);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white text-[11px] font-bold shadow transition transform hover:scale-105"
+                title="Beli atau Redeem Token"
+              >
+                <PlusCircle className="w-3 h-3" /> Top Up
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -235,9 +301,18 @@ export default function App() {
                 </button>
                 <button
                   onClick={handleDownload}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white text-sm font-semibold shadow-lg shadow-indigo-500/25 flex items-center gap-2 transition"
+                  className={`px-5 py-2 rounded-xl text-sm font-semibold shadow-lg flex items-center gap-2 transition ${
+                    wallet.balance > 0
+                      ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white shadow-indigo-500/25'
+                      : 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/25'
+                  }`}
+                  title={wallet.balance > 0 ? 'Mengkonsumsi 1 Token per unduhan' : 'Token habis, klik untuk top up'}
                 >
-                  <Download className="w-4 h-4" /> Download OUT.xlsx
+                  <Download className="w-4 h-4" />
+                  <span>Download OUT.xlsx</span>
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-black/30 text-amber-200 flex items-center gap-1">
+                    <Coins className="w-3 h-3 text-amber-300" /> -1 Token
+                  </span>
                 </button>
               </div>
             </div>
@@ -364,10 +439,58 @@ export default function App() {
         )}
       </main>
 
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-md bg-emerald-500/90 text-white px-5 py-3.5 rounded-2xl shadow-2xl backdrop-blur-md border border-emerald-400/40 flex items-center gap-3 animate-bounce">
+          <Sparkles className="w-5 h-5 text-amber-200 shrink-0" />
+          <p className="text-sm font-medium">{toastMessage}</p>
+        </div>
+      )}
+
       {/* Footer */}
-      <footer className="border-t border-slate-800 py-6 text-center text-xs text-slate-500">
-        X-Ray Template Generator &bull; Siap dideploy di Vercel &bull; Bebas server &amp; berjalan langsung di browser
+      <footer className="border-t border-slate-800 py-6 text-xs text-slate-500 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>
+            X-Ray Template Generator &bull; Siap dideploy di Vercel &bull; Client-side 100% aman
+          </p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                setTopUpNotice(null);
+                setIsTopUpOpen(true);
+              }}
+              className="text-amber-400 hover:text-amber-300 transition flex items-center gap-1 font-medium"
+            >
+              <Coins className="w-3.5 h-3.5" /> Beli Token ({wallet.balance} tersedia)
+            </button>
+            <span className="text-slate-700">&bull;</span>
+            <button
+              onClick={() => setIsAdminOpen(true)}
+              className="text-slate-500 hover:text-slate-300 transition"
+              title="Khusus Pemilik Aplikasi (PIN)"
+            >
+              Portal Admin
+            </button>
+          </div>
+        </div>
       </footer>
+
+      {/* Modals */}
+      <TopUpModal
+        isOpen={isTopUpOpen}
+        onClose={() => {
+          setIsTopUpOpen(false);
+          setTopUpNotice(null);
+        }}
+        onWalletUpdated={(w) => setWallet(w)}
+        requiredActionNotice={topUpNotice || undefined}
+      />
+
+      <AdminVoucherModal
+        isOpen={isAdminOpen}
+        onClose={() => setIsAdminOpen(false)}
+        onWalletUpdated={(w) => setWallet(w)}
+      />
     </div>
   );
 }

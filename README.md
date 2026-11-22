@@ -8,6 +8,26 @@ Mendukung **2 tipe format input**:
 
 ---
 
+## 🪙 Sistem Token & Monetisasi
+
+Aplikasi ini dilengkapi dengan modul monetisasi berbasis saldo token yang sepenuhnya berjalan di sisi client:
+- **Free Welcome Token**: Pengguna baru otomatis mendapatkan saldo **10 Token gratis** saat pertama kali membuka aplikasi.
+- **Konsumsi Token**: Setiap 1x konversi / unduhan file `OUT.xlsx` mengonsumsi **1 Token**.
+- **Paket Top Up Token**:
+  - 20 Token = Rp 20.000
+  - 50 Token = Rp 50.000
+  - 100 Token = Rp 100.000
+- **Pembayaran via Transfer Bank**:
+  - **BCA**: `6090260021` a.n. Bayu Nurcahyono
+  - **Jago**: `105692105503` a.n. Bayu Nurcahyono
+  - **BRI**: `140001000726504` a.n. Bayu Nurcahyono
+- **Konfirmasi Otomatis**: Dilengkapi tombol salin nomor rekening 1-klik dan tautan WhatsApp otomatis berisi User ID dan nominal transfer.
+- **Redeem Voucher & Portal Admin**:
+  - Admin (Bayu) dapat mengakses **Portal Admin** di bagian bawah aplikasi dengan PIN (`2026`).
+  - Admin dapat men-generate kode voucher valid ber-checksum (format: `XRAY-<amount>-<rand>-<hash>`) dan mengirimkannya kepada pengguna setelah transfer terkonfirmasi.
+
+---
+
 ## 📋 Pemetaan Kolom (Mapping Rules)
 
 | No | Kolom di `OUT.xlsx` | Format 1 (Manifes BC 1.1) | Format 2 (NVOCC / BL) | Keterangan |
