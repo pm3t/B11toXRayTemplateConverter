@@ -236,35 +236,7 @@ export default function App() {
             )}
 
             {/* Feature Highlights */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-12 text-center sm:text-left">
-              <div className="p-5 rounded-2xl bg-slate-800/40 border border-slate-800">
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-3">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <h3 className="font-semibold text-sm mb-1">Filter Otomatis</h3>
-                <p className="text-xs text-slate-400">
-                  Secara cerdas memfilter barang "CONSOL" dan mengambil uraian barang spesifik (dibatasi 50 karakter).
-                </p>
-              </div>
-              <div className="p-5 rounded-2xl bg-slate-800/40 border border-slate-800">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center mb-3">
-                  <Package className="w-5 h-5" />
-                </div>
-                <h3 className="font-semibold text-sm mb-1">Act Pcs &amp; Tot Pcs</h3>
-                <p className="text-xs text-slate-400">
-                  Kolom Act Pcs terisi otomatis dari JUMLAH KEMASAN dan Tot Pcs dari TOTAL KEMASAN.
-                </p>
-              </div>
-              <div className="p-5 rounded-2xl bg-slate-800/40 border border-slate-800">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3">
-                  <Download className="w-5 h-5" />
-                </div>
-                <h3 className="font-semibold text-sm mb-1">Siap untuk Vercel</h3>
-                <p className="text-xs text-slate-400">
-                  Berjalan penuh di sisi browser tanpa batasan ukuran file, tanpa latency, dan tanpa server backend.
-                </p>
-              </div>
-            </div>
+           
           </div>
         )}
 
@@ -451,7 +423,7 @@ export default function App() {
       <footer className="border-t border-slate-800 py-6 text-xs text-slate-500 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>
-            X-Ray Template Generator &bull; Siap dideploy di Vercel &bull; Client-side 100% aman
+            &nbsp;
           </p>
           <div className="flex items-center gap-4">
             <button
@@ -482,14 +454,19 @@ export default function App() {
           setIsTopUpOpen(false);
           setTopUpNotice(null);
         }}
-        onWalletUpdated={(w) => setWallet(w)}
-        requiredActionNotice={topUpNotice || undefined}
+        wallet={wallet}
+        onWalletUpdated={() => setWallet(getOrCreateWallet())}
+        onOpenAdminModal={() => {
+          setIsTopUpOpen(false);
+          setIsAdminOpen(true);
+        }}
+        initialNotice={topUpNotice}
       />
 
       <AdminVoucherModal
         isOpen={isAdminOpen}
         onClose={() => setIsAdminOpen(false)}
-        onWalletUpdated={(w) => setWallet(w)}
+        onTokensUpdated={() => setWallet(getOrCreateWallet())}
       />
     </div>
   );

@@ -14,14 +14,14 @@ import {
 } from 'lucide-react';
 import { TOKEN_PACKAGES, BANK_ACCOUNTS, ADMIN_WHATSAPP_NUMBER } from '../config/pricing';
 import { TokenPackage, UserWallet } from '../types/token';
-import { redeemVoucherCode } from '../services/tokenService';
+import { redeemVoucherCode, getOrCreateWallet } from '../services/tokenService';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  wallet: UserWallet;
-  onWalletUpdated: () => void;
-  onOpenAdminModal: () => void;
+  wallet?: UserWallet;
+  onWalletUpdated?: () => void;
+  onOpenAdminModal?: () => void;
   initialNotice?: string | null;
 }
 
@@ -33,6 +33,7 @@ export default function TopUpModal({
   onOpenAdminModal,
   initialNotice,
 }: Props) {
+  const activeWallet = wallet || getOrCreateWallet();
   const [selectedPkg, setSelectedPkg] = useState<TokenPackage>(TOKEN_PACKAGES[1]); // default 50 tokens
   const [selectedBank, setSelectedBank] = useState<string>(BANK_ACCOUNTS[0].bank);
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
@@ -65,7 +66,7 @@ export default function TopUpModal({
         message: `Selamat! Voucher berhasil ditukarkan. Saldo Anda bertambah +${res.tokensAdded} Token (Total: ${res.newBalance} Token).`,
       });
       setVoucherCode('');
-      onWalletUpdated();
+      onWalletUpdated?.();
     } else {
       setRedeemStatus({
         success: false,
@@ -79,7 +80,7 @@ export default function TopUpModal({
   const waMessage = encodeURIComponent(
     `Halo Mas Bayu, saya ingin konfirmasi pembelian token X-Ray Generator:\n\n` +
       `• Paket: ${selectedPkg.tokens} Token (${selectedPkg.formattedPrice})\n` +
-      `• User ID: ${wallet.userId}\n` +
+      `• User ID: ${activeWallet.userId}\n` +
       `• Bank Tujuan: ${currentBank.bank} (${currentBank.number} a.n ${currentBank.holder})\n\n` +
       `Berikut saya lampirkan bukti transfer. Mohon dikirimkan kode voucher tokennya. Terima kasih!`
   );
@@ -101,13 +102,13 @@ export default function TopUpModal({
               </h2>
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <span>
-                  Sisa Saldo: <b className="text-amber-400 font-semibold">{wallet.balance} Token</b>
+                  Sisa Saldo: <b className="text-amber-400 font-semibold">{activeWallet.balance} Token</b>
                 </span>
                 <span>&bull;</span>
                 <span className="flex items-center gap-1">
-                  ID: <code className="text-slate-300 font-mono">{wallet.userId}</code>
+                  ID: <code className="text-slate-300 font-mono">{activeWallet.userId}</code>
                   <button
-                    onClick={() => copyToClipboard(wallet.userId, 'userId')}
+                    onClick={() => copyToClipboard(activeWallet.userId, 'userId')}
                     className="hover:text-white p-0.5"
                     title="Salin ID"
                   >
@@ -340,7 +341,7 @@ export default function TopUpModal({
           <button
             onClick={() => {
               onClose();
-              onOpenAdminModal();
+              onOpenAdminModal?.();
             }}
             className="text-slate-400 hover:text-amber-400 flex items-center gap-1 font-medium transition"
           >
