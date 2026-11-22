@@ -78,7 +78,7 @@ export default function TopUpModal({
   const currentBank = BANK_ACCOUNTS.find((b) => b.bank === selectedBank) || BANK_ACCOUNTS[0];
 
   const waMessage = encodeURIComponent(
-    `Halo Mas Bayu, saya ingin konfirmasi pembelian token X-Ray Generator:\n\n` +
+    `Halo, saya ingin konfirmasi pembelian token X-Ray Generator:\n\n` +
       `• Paket: ${selectedPkg.tokens} Token (${selectedPkg.formattedPrice})\n` +
       `• User ID: ${activeWallet.userId}\n` +
       `• Bank Tujuan: ${currentBank.bank} (${currentBank.number} a.n ${currentBank.holder})\n\n` +

@@ -52,7 +52,7 @@ export const BANK_ACCOUNTS: BankAccount[] = [
 // Nomor WhatsApp admin untuk konfirmasi pembayaran (format internasional diawali 62, contoh: 62812XXXXXXXX)
 // Bisa diubah langsung di bawah atau lewat environment variable VITE_ADMIN_WHATSAPP di Vercel
 export const ADMIN_WHATSAPP_NUMBER =
-  (import.meta.env.VITE_ADMIN_WHATSAPP as string) || '6281234567890';
+  (import.meta.env.VITE_ADMIN_WHATSAPP as string) || '6281584889915';
 
 // PIN Rahasia Admin (bisa di-override lewat environment variable VITE_ADMIN_PIN)
 export const ADMIN_SECRET_PIN = (import.meta.env.VITE_ADMIN_PIN as string) || '2026';
