@@ -86,8 +86,8 @@ export default function AdminVoucherModal({ isOpen, onClose, onTokensUpdated }: 
                       setPin(e.target.value);
                       setPinError(false);
                     }}
-                    placeholder="PIN default: 2026"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-amber-500"
+                    placeholder="Masukkan PIN rahasia..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-amber-500 placeholder:text-slate-500"
                     autoFocus
                   />
                 </div>
